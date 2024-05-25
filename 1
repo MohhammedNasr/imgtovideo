@@ -1,0 +1,63 @@
+!pip install -q -U diffusers transformers accelerate
+import os
+from diffusers import StableVideoDiffusionPipeline
+from diffusers.utils import load_image, export_to_video
+import torch
+from moviepy.editor import VideoFileClip, concatenate_videoclips
+# Initialize the video diffusion pipeline
+pipe = StableVideoDiffusionPipeline.from_pretrained(
+    "stabilityai/stable-video-diffusion-img2vid-xt", torch_dtype=torch.float16, variant="fp16"
+)
+pipe.enable_model_cpu_offload()
+
+# Specify the folder containing images
+image_folder = "/content/images"
+
+# Specify the output folder for videos
+output_folder = "/content/videos"
+
+# Iterate over each image in the folder
+for filename in os.listdir(image_folder):
+    if filename.endswith(".png") or filename.endswith(".jpg"):
+        # Load the image
+        image_path = os.path.join(image_folder, filename)
+        image = load_image(image_path)
+        image = image.resize((1024, 576))
+
+        # Generate video frames using the diffusion pipeline
+        generator = torch.manual_seed(42)
+        frames = pipe(image, decode_chunk_size=8, generator=generator).frames[0]
+
+        # Create output video filename
+        video_filename = os.path.splitext(filename)[0] + ".mp4"
+        output_video_path = os.path.join(output_folder, video_filename)
+
+        # Export frames to video
+        export_to_video(frames, output_video_path, fps=7)
+
+        print(f"Video saved: {output_video_path}")
+
+video_folder = "/content/videos"
+
+# Initialize a list to store VideoFileClip objects for each video
+video_clips = []
+
+# Iterate over each video in the folder
+for filename in os.listdir(video_folder):
+    if filename.endswith(".mp4"):
+        # Read the video and append the VideoFileClip object to the list
+        video_path = os.path.join(video_folder, filename)
+        clip = VideoFileClip(video_path)
+        video_clips.append(clip)
+
+# Concatenate the video clips
+final_clip = concatenate_videoclips(video_clips)
+
+# Specify the output folder and filename for the merged video
+merged_video_filename = "merged_video.mp4"
+output_merged_video_path = os.path.join(video_folder, merged_video_filename)
+
+# Write the merged video to the output file
+final_clip.write_videofile(output_merged_video_path)
+
+print(f"Merged video saved: {output_merged_video_path}")
